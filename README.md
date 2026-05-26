@@ -34,7 +34,25 @@ El monitor está diseñado para permanecer fijo por encima de otras ventanas en 
 *   Tener instalado **Python 3.8 o superior**.
 *   Conexión a internet estable.
 
-### 2. Instrucciones de Inicio
+### 2. Configuración del Token de la API Banxico (SIE)
+Para poder consultar la información financiera oficial, el monitor requiere de un token (clave) gratuito de la API del Sistema de Información Económica (SIE) de Banco de México:
+
+1.  **Obtener Token**: Registra tu correo electrónico y obtén tu token gratuito en la [página oficial de Banxico](https://www.banxico.org.mx/SieAPIRest/service/v1/token).
+2.  **Configuración en la Primera Ejecución (Recomendada)**: 
+    *   Al abrir el monitor por primera vez (ejecutando `python tiie_monitor.py`), aparecerá automáticamente una ventana emergente pidiéndote pegar tu token.
+    *   Una vez introducido, el monitor lo guardará automáticamente en un archivo local llamado `banxico_token.txt` y no volverá a pedírtelo.
+3.  **Configuración Manual**:
+    *   Crea un archivo llamado `banxico_token.txt` en la misma carpeta del script.
+    *   Pega tu token en el archivo y guárdalo.
+4.  **Uso mediante Variables de Entorno**:
+    *   Define una variable de entorno en tu sistema llamada `BANXICO_TOKEN` con el valor de tu token.
+5.  **Cambiar o Actualizar el Token**:
+    *   Si requieres cambiar tu token, haz clic derecho sobre cualquier parte del monitor, selecciona **"Configurar Token 🔑"**, ingresa la nueva clave en la ventana flotante y presiona Aceptar. Los datos se actualizarán al instante.
+
+> [!IMPORTANT]
+> El archivo `banxico_token.txt` está listado en `.gitignore`, por lo que **nunca se subirá a tu repositorio de GitHub**, protegiendo tu clave privada de accesos públicos no autorizados.
+
+### 3. Instrucciones de Inicio
 Para arrancar el monitor, abre una terminal (PowerShell o cmd) en la carpeta del proyecto y ejecuta:
 ```powershell
 python tiie_monitor.py
