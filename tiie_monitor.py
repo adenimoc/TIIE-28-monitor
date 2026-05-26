@@ -9,9 +9,11 @@ import urllib.request
 import urllib.error
 import logging
 from tkinter import Tk, Frame, Label, Menu, StringVar, Canvas, Text, BOTH, LEFT, RIGHT, Y, X
+from tkinter import messagebox, simpledialog
 
 # Configuration and Constants
-BANXICO_TOKEN = "f790ae51a34ab0af596fca1024f508d5810f4f52ff74ebac1244c4c741a60fa0"
+# Banxico API token is configured dynamically at startup.
+# It can also be loaded from the BANXICO_TOKEN environment variable.
 TIIE_SERIES_ID = "SF43783"       # TIIE a 28 dias diaria
 TASA_OBJ_SERIES_ID = "SF61745"   # Tasa Objetivo Banxico
 LOG_FILENAME = "tiie_monitor.log"
@@ -90,6 +92,9 @@ class TIIEMonitorApp:
     def __init__(self, root):
         self.root = root
         self.root.title("TIIE 28 Dias  BANXICO- SIIE")
+        
+        # Load Banxico API Token dynamically (Prompt if not found)
+        self.api_token = self.load_or_prompt_token()
         
         # Borderless, always-on-top window setup
         self.root.overrideredirect(True)
@@ -314,6 +319,7 @@ class TIIEMonitorApp:
         self.context_menu.add_command(label="Refrescar Ahora ↻", command=self.trigger_refresh)
         self.context_menu.add_command(label="Colapsar / Expandir ⤢", command=self.toggle_collapse)
         self.context_menu.add_command(label="Minimizar a Barra ─", command=self.minimize_window)
+        self.context_menu.add_command(label="Configurar Token 🔑", command=self.change_api_token)
         
         # Opacity submenu
         self.opacity_submenu = Menu(self.context_menu, tearoff=0, bg=COLOR_HEADER, fg=COLOR_TEXT_PRIMARY, activebackground=COLOR_BG, bd=1)
@@ -503,7 +509,7 @@ class TIIEMonitorApp:
             logger.info(f"Querying Banxico API range: {start_str} to {end_str} for series {','.join(all_series_ids)}")
             
             req = urllib.request.Request(url)
-            req.add_header("Bmx-Token", BANXICO_TOKEN)
+            req.add_header("Bmx-Token", self.api_token)
             
             try:
                 with urllib.request.urlopen(req, context=ctx, timeout=12) as response:
@@ -838,6 +844,73 @@ class TIIEMonitorApp:
             self.root.after(1500, lambda: self.copy_btn.config(text="Copiar Tabla 📋", fg=COLOR_TEXT_PRIMARY))
         except Exception as e:
             logger.error(f"Error copying table to clipboard: {e}")
+
+    def load_or_prompt_token(self):
+        # 1. Check environment variable
+        token = os.environ.get("BANXICO_TOKEN")
+        if token:
+            return token
+            
+        # 2. Check local file
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        token_file_path = os.path.join(script_dir, "banxico_token.txt")
+        if os.path.exists(token_file_path):
+            try:
+                with open(token_file_path, "r", encoding="utf-8") as f:
+                    token = f.read().strip()
+                    if token:
+                        return token
+            except Exception as e:
+                logger.error(f"Error reading token file: {e}")
+                
+        # 3. Prompt user via GUI dialog
+        self.root.deiconify()
+        
+        while True:
+            token = simpledialog.askstring(
+                "Token Banxico SIE",
+                "Introduce tu Token de la API de Banxico:\n(Puedes obtenerlo gratis en banxico.org.mx/SieAPIRest)",
+                parent=self.root
+            )
+            if token is None: # Clicked Cancel
+                messagebox.showerror("Error", "Se requiere un token de Banxico para iniciar el monitor. El script se cerrará.", parent=self.root)
+                self.root.destroy()
+                sys.exit(0)
+                
+            token = token.strip()
+            if token:
+                try:
+                    with open(token_file_path, "w", encoding="utf-8") as f:
+                        f.write(token)
+                    logger.info("New Banxico API Token saved locally in banxico_token.txt")
+                    return token
+                except Exception as e:
+                    logger.error(f"Error saving token file: {e}")
+                    return token
+            else:
+                messagebox.showwarning("Advertencia", "El token no puede estar vacío.", parent=self.root)
+
+    def change_api_token(self):
+        new_token = simpledialog.askstring(
+            "Configurar Token",
+            "Introduce tu nuevo Token de la API de Banxico:",
+            parent=self.root,
+            initialvalue=self.api_token
+        )
+        if new_token:
+            new_token = new_token.strip()
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            token_file_path = os.path.join(script_dir, "banxico_token.txt")
+            try:
+                with open(token_file_path, "w", encoding="utf-8") as f:
+                    f.write(new_token)
+                self.api_token = new_token
+                logger.info("Banxico API Token changed and updated successfully.")
+                messagebox.showinfo("Éxito", "Token actualizado correctamente. Se refrescarán los datos.", parent=self.root)
+                self.trigger_refresh()
+            except Exception as e:
+                logger.error(f"Error updating token file: {e}")
+                messagebox.showerror("Error", f"No se pudo guardar el token: {e}", parent=self.root)
 
     # --- SCHEDULER IMPLEMENTATION ---
     def run_scheduler(self):

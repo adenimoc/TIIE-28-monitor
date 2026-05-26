@@ -5,3 +5,6 @@ __pycache__/
 
 # Application Log
 tiie_monitor.log
+
+# Banxico Local Token
+banxico_token.txt
