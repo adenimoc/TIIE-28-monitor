@@ -12,7 +12,8 @@ from tkinter import Tk, Frame, Label, Menu, StringVar, Canvas, BOTH, LEFT, RIGHT
 
 # Configuration and Constants
 BANXICO_TOKEN = "f790ae51a34ab0af596fca1024f508d5810f4f52ff74ebac1244c4c741a60fa0"
-SERIES_ID = "SF43783"  # TIIE a 28 dias diaria
+TIIE_SERIES_ID = "SF43783"       # TIIE a 28 dias diaria
+TASA_OBJ_SERIES_ID = "SF61745"   # Tasa Objetivo Banxico
 LOG_FILENAME = "tiie_monitor.log"
 UPDATE_HOURS = [12, 13, 14, 15, 18, 19]
 
@@ -206,8 +207,8 @@ class TIIEMonitorApp:
         self.monthly_frame = Frame(self.container, bg=COLOR_BG)
         self.monthly_frame.pack(fill=X, padx=10, pady=2)
         
-        # Title of Monthly Card
-        self.monthly_title_lbl = Label(self.monthly_frame, text="TIIE PROMEDIO MENSUAL (20D HÁBILES)", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_MUTED, bg=COLOR_BG)
+        # Title of Monthly Card (Now Tasa Objetivo)
+        self.monthly_title_lbl = Label(self.monthly_frame, text="TASA OBJETIVO BANXICO", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_MUTED, bg=COLOR_BG)
         self.monthly_title_lbl.pack(anchor="w")
         
         # Monthly main row (value & trend)
@@ -388,8 +389,8 @@ class TIIEMonitorApp:
             start_str = start_date.strftime("%Y-%m-%d")
             end_str = end_date.strftime("%Y-%m-%d")
             
-            url = f"https://www.banxico.org.mx/SieAPIRest/service/v1/series/{SERIES_ID}/datos/{start_str}/{end_str}"
-            logger.info(f"Querying Banxico API range: {start_str} to {end_str}")
+            url = f"https://www.banxico.org.mx/SieAPIRest/service/v1/series/{TIIE_SERIES_ID},{TASA_OBJ_SERIES_ID}/datos/{start_str}/{end_str}"
+            logger.info(f"Querying Banxico API range: {start_str} to {end_str} for series {TIIE_SERIES_ID},{TASA_OBJ_SERIES_ID}")
             
             req = urllib.request.Request(url)
             req.add_header("Bmx-Token", BANXICO_TOKEN)
@@ -400,18 +401,13 @@ class TIIEMonitorApp:
                     parsed_res = json.loads(res_body)
                     
                     series_list = parsed_res.get("bmx", {}).get("series", [])
-                    if not series_list:
-                        raise ValueError("Empty series returned from API")
+                    if not series_list or len(series_list) < 2:
+                        raise ValueError("Expected 2 series from Banxico API, got fewer or none")
                     
-                    series_data = series_list[0]
-                    observations = series_data.get("datos", [])
-                    if not observations:
-                        raise ValueError(f"No observations found for series {SERIES_ID}")
-                    
-                    logger.info(f"Retrieved {len(observations)} observations successfully.")
+                    logger.info(f"Retrieved {len(series_list)} series successfully.")
                     
                     # Process and calculate indicators
-                    self.process_observations(observations)
+                    self.process_observations_multi(series_list)
                     success = True
                     
             except urllib.error.HTTPError as he:
@@ -427,27 +423,33 @@ class TIIEMonitorApp:
             # Update GUI elements on main thread
             self.root.after(0, lambda: self.finalize_update_ui(success, error_msg))
 
-    def process_observations(self, observations):
+    def process_observations_multi(self, series_list):
         # Banxico API reports ascending date order (oldest first).
-        # Convert values to float
-        dates = []
-        rates = []
-        for obs in observations:
-            try:
-                val = float(obs["dato"])
-                rates.append(val)
-                dates.append(obs["fecha"])
-            except (ValueError, TypeError):
-                continue
+        # Build dictionary of series data
+        series_dict = {}
+        for s in series_list:
+            sid = s.get("idSerie")
+            obs_list = s.get("datos", [])
+            
+            dates = []
+            rates = []
+            for obs in obs_list:
+                try:
+                    val = float(obs["dato"])
+                    rates.append(val)
+                    dates.append(obs["fecha"])
+                except (ValueError, TypeError):
+                    continue
+            series_dict[sid] = rates
+            
+        tiie_rates = series_dict.get(TIIE_SERIES_ID, [])
+        tasa_obj_rates = series_dict.get(TASA_OBJ_SERIES_ID, [])
         
-        n = len(rates)
-        if n < 40:
-            logger.warning(f"Insufficient business days loaded ({n} < 40). Predictions might be skewed.")
-        
-        if n >= 2:
-            # 1. DAILY TIIE DETAILS
-            latest_val = rates[-1]
-            prev_val = rates[-2]
+        # 1. DAILY TIIE DETAILS
+        n_tiie = len(tiie_rates)
+        if n_tiie >= 2:
+            latest_val = tiie_rates[-1]
+            prev_val = tiie_rates[-2]
             daily_diff = latest_val - prev_val
             
             # Format display
@@ -455,7 +457,7 @@ class TIIEMonitorApp:
             self.daily_prev.set(f"Ant: {prev_val:.4f}%")
             
             # Predict next business day daily rate based on last 5 days
-            recent_rates_5 = rates[-5:] if n >= 5 else rates
+            recent_rates_5 = tiie_rates[-5:] if n_tiie >= 5 else tiie_rates
             predicted_tomorrow = calculate_linear_regression_next(recent_rates_5)
             self.daily_next.set(f"Est. Mañana: {predicted_tomorrow:.4f}%")
             
@@ -472,55 +474,41 @@ class TIIEMonitorApp:
                 self.daily_trend_sym.set("=")
                 self.daily_trend_text.set("Estable")
                 self.daily_trend_color = COLOR_ACCENT_GOLD
-                
-            # 2. MONTHLY TIIE DETAILS (Average of last 20 business days)
-            # 20 business days is the standard financial representation of a month
-            k = min(n, 20)
-            current_monthly_rates = rates[-k:]
-            current_monthly_avg = sum(current_monthly_rates) / k
+        else:
+            logger.error("Insufficient observations for TIIE")
+            raise ValueError("Insufficient observations for TIIE")
             
-            self.monthly_val.set(f"{current_monthly_avg:.4f}%")
+        # 2. TASA OBJETIVO DETAILS
+        n_tasa = len(tasa_obj_rates)
+        if n_tasa >= 2:
+            latest_val = tasa_obj_rates[-1]
+            prev_val = tasa_obj_rates[-2]
+            tasa_diff = latest_val - prev_val
             
-            # Prior monthly average: days -40 to -20 (or prior window)
-            if n >= 2 * k:
-                prior_monthly_rates = rates[-(2*k):-k]
-                prior_monthly_avg = sum(prior_monthly_rates) / k
-                self.monthly_prev.set(f"Mes Ant: {prior_monthly_avg:.4f}%")
-                monthly_diff = current_monthly_avg - prior_monthly_avg
-            else:
-                # Fallback if history is short
-                prior_monthly_avg = current_monthly_avg
-                self.monthly_prev.set("Mes Ant: --.- %")
-                monthly_diff = 0.0
-                
-            # Predict tomorrow's 20-day moving average.
-            # Tomorrow's average drops the oldest value in the window and adds the projected tomorrow's daily value!
-            if n >= 20:
-                # Last 19 values plus predicted tomorrow daily rate
-                projected_rates_for_ma = rates[-19:] + [predicted_tomorrow]
-                predicted_monthly_avg = sum(projected_rates_for_ma) / 20
-            else:
-                predicted_monthly_avg = current_monthly_avg
+            self.monthly_val.set(f"{latest_val:.4f}%")
+            self.monthly_prev.set(f"Ant: {prev_val:.4f}%")
             
-            self.monthly_next.set(f"Sig. Est: {predicted_monthly_avg:.4f}%")
+            # Predict tomorrow's target rate (constant extrapolation via regression)
+            recent_rates_5 = tasa_obj_rates[-5:] if n_tasa >= 5 else tasa_obj_rates
+            predicted_tomorrow = calculate_linear_regression_next(recent_rates_5)
+            self.monthly_next.set(f"Est. Siguiente: {predicted_tomorrow:.4f}%")
             
-            # Monthly trend indicator
-            if monthly_diff > 0.00001:
+            # Trend calculation
+            if tasa_diff > 0.00001:
                 self.monthly_trend_sym.set("▲")
-                self.monthly_trend_text.set(f"+{monthly_diff:.4f}%")
+                self.monthly_trend_text.set(f"+{tasa_diff:.4f}%")
                 self.monthly_trend_color = COLOR_ACCENT_GREEN
-            elif monthly_diff < -0.00001:
+            elif tasa_diff < -0.00001:
                 self.monthly_trend_sym.set("▼")
-                self.monthly_trend_text.set(f"{monthly_diff:.4f}%")
+                self.monthly_trend_text.set(f"{tasa_diff:.4f}%")
                 self.monthly_trend_color = COLOR_ACCENT_RED
             else:
                 self.monthly_trend_sym.set("=")
                 self.monthly_trend_text.set("Estable")
                 self.monthly_trend_color = COLOR_ACCENT_GOLD
-                
         else:
-            logger.error("Not enough observations to compute daily metrics")
-            raise ValueError("Insufficient observations (less than 2)")
+            logger.error("Insufficient observations for Tasa Objetivo")
+            raise ValueError("Insufficient observations for Tasa Objetivo")
 
     def finalize_update_ui(self, success, error_msg):
         self.updating_now = False

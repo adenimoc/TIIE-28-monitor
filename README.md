@@ -1,6 +1,6 @@
-# Monitor de TIIE 28 Días — BANXICO-SIIE (v0.1)
+# Monitor de TIIE 28 Días y Tasa Objetivo — BANXICO-SIIE (v0.1)
 
-Una interfaz gráfica ultra-compacta y elegante (tipo widget overlay de Nvidia) desarrollada en Python para el monitoreo en tiempo real de la **Tasa de Interés Interbancaria de Equilibrio (TIIE) a 28 días** (diaria y promedio mensual), consumiendo la API oficial de Banco de México (Banxico).
+Una interfaz gráfica ultra-compacta y elegante (tipo widget overlay de Nvidia) desarrollada en Python para el monitoreo en tiempo real de la **Tasa de Interés Interbancaria de Equilibrio (TIIE) a 28 días** diaria y la **Tasa Objetivo** de política monetaria, consumiendo la API oficial de Banco de México (Banxico).
 
 El monitor está diseñado para permanecer fijo por encima de otras ventanas en pantalla, facilitando a analistas financieros, desarrolladores y tomadores de decisiones el acceso rápido al costo del dinero en México.
 
@@ -47,11 +47,11 @@ El widget aparecerá de inmediato en la esquina superior derecha de la pantalla 
 |                                                       |
 |  ---------------------------------------------------  |  <-- Separador Fino
 |                                                       |
-|  TIIE PROMEDIO MENSUAL (20D HÁBILES)                  |
-|  6.7725%   ▲ +0.0520%                                 |  <-- Tarjeta Mensual (MA20, Tendencia)
-|  Mes Ant: 6.7205%  |  Sig. Est: 6.7750%               |  <-- Meta (Mes anterior vs Predicción)
+|  TASA OBJETIVO BANXICO                                |
+|  6.5000%   = Estable                                  |  <-- Tarjeta Tasa Objetivo (Valor, Tendencia)
+|  Ant: 6.5000%  |  Est. Siguiente: 6.5000%             |  <-- Meta (Tasa anterior vs Predicción)
 |                                                       |
-|  ● Act: 11:16:41                           SIE Banxico|  <-- Pie de página (Estado, Origen)
+|  ● Act: 11:25:42                           SIE Banxico|  <-- Pie de página (Estado, Origen)
 +-------------------------------------------------------+
 ```
 
@@ -67,24 +67,21 @@ El widget aparecerá de inmediato en la esquina superior derecha de la pantalla 
 ## Detalles Técnicos y Matemáticos
 
 ### 1. Consumo del API REST de Banxico
-El widget consume la serie **SF43783** (TIIE a 28 días, diaria en porcentaje anual) mediante el servicio REST del SIE.
-*   Para optimizar la cuota de peticiones, el monitor solicita el histórico de los últimos 90 días naturales en una única petición.
+El widget consume de forma conjunta las series **SF43783** (TIIE a 28 días diaria) y **SF61745** (Tasa Objetivo del Banco de México) en una única petición de rango mediante el servicio REST del SIE.
+*   Para optimizar la cuota de peticiones y respetar los límites de la API, el monitor solicita el histórico de los últimos 90 días naturales para ambas series de forma simultánea.
 *   El protocolo TLS 1.3 se configura explícitamente mediante el contexto SSL de Python (`DEFAULT@SECLEVEL=1`) para evitar errores de comunicación en sistemas Windows antiguos.
 
 ### 2. Lógica del Motor de Análisis
-*   **Tendencia Diaria**: Se calcula la diferencia aritmética entre la tasa observada más reciente ($t_0$) y la del día hábil inmediato anterior ($t_{-1}$):
-    $$\Delta_{\text{diaria}} = t_0 - t_{-1}$$
-    *   $\Delta_{\text{diaria}} > 0.00001\% \rightarrow$ Alza (`▲` verde)
-    *   $\Delta_{\text{diaria}} < -0.00001\% \rightarrow$ Baja (`▼` rojo)
+*   **Tendencia (Diaria y Tasa Objetivo)**: Se calcula la diferencia aritmética entre el valor observado más reciente ($v_0$) y el de la jornada inmediata anterior ($v_{-1}$):
+    $$\Delta = v_0 - v_{-1}$$
+    *   $\Delta > 0.00001\% \rightarrow$ Alza (`▲` verde)
+    *   $\Delta < -0.00001\% \rightarrow$ Baja (`▼` rojo)
     *   Diferencia insignificante $\rightarrow$ Estable (`=` dorado)
-*   **TIIE Mensual (Promedio)**: Se calcula el promedio simple de las últimas 20 observaciones hábiles (equivalente financiero a un plazo de 28 días naturales de operación):
-    $$PM_{\text{actual}} = \frac{1}{20} \sum_{i=0}^{19} t_{-i}$$
-*   **Tendencia Mensual**: Compara el promedio del mes actual ($PM_{\text{actual}}$) con el promedio del mes anterior ($PM_{\text{anterior}}$), que abarca de la observación 21 a la 40:
-    $$\Delta_{\text{mensual}} = PM_{\text{actual}} - PM_{\text{anterior}}$$
+*   **Tasa Objetivo**: Representa la tasa de interés de referencia para las operaciones interbancarias a un día establecidas por la Junta de Gobierno del Banco de México. Al ser una tasa de política monetaria, se mantiene constante por semanas o meses y cambia de forma discreta (+/-0.25% generalmente).
 *   **Algoritmo de Predicción (Regresión Lineal)**:
-    Se ajusta un modelo por mínimos cuadrados ordinarios $y = mx + c$ sobre las últimas 5 observaciones para proyectar el valor del día siguiente (índice 5):
-    *   **Tasa Diaria Mañana**: Proyección directa de la recta de regresión.
-    *   **Tasa Mensual Sig. Est**: Se calcula el promedio móvil proyectado reemplazando el valor más antiguo de la ventana por la tasa diaria estimada para mañana.
+    Se ajusta un modelo por mínimos cuadrados ordinarios $y = mx + c$ sobre las últimas 5 observaciones para preguntar la tasa de la jornada siguiente:
+    *   **Tasa Diaria Mañana (TIIE 28d)**: Proyección lineal a partir de la pendiente de los últimos 5 días.
+    *   **Tasa Objetivo Siguiente**: Proyección lineal a partir de los últimos 5 días (se mantiene plana a menos que haya habido un cambio muy reciente).
 
 ---
 
