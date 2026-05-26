@@ -1,15 +1,22 @@
-# Monitor de TIIE 28 Días y Tasa Objetivo — BANXICO-SIIE (v0.1)
+# Monitor de TIIE 28 Días, Tasa Objetivo y Expectativas — BANXICO-SIIE (v0.2)
 
-Una interfaz gráfica ultra-compacta y elegante (tipo widget overlay de Nvidia) desarrollada en Python para el monitoreo en tiempo real de la **Tasa de Interés Interbancaria de Equilibrio (TIIE) a 28 días** diaria y la **Tasa Objetivo** de política monetaria, consumiendo la API oficial de Banco de México (Banxico).
+Una interfaz gráfica ultra-compacta y elegante (tipo widget overlay de Nvidia) desarrollada en Python para el monitoreo en tiempo real de la **Tasa de Interés Interbancaria de Equilibrio (TIIE) a 28 días** diaria, la **Tasa Objetivo** de política monetaria, y las **Expectativas de la Encuesta de Cetes a 28 días** al cierre del año actual y siguiente, consumiendo la API oficial de Banco de México (Banxico).
 
-El monitor está diseñado para permanecer fijo por encima de otras ventanas en pantalla, facilitando a analistas financieros, desarrolladores y tomadores de decisiones el acceso rápido al costo del dinero en México.
+El monitor está diseñado para permanecer fijo por encima de otras ventanas en pantalla, facilitando a analistas financieros, desarrolladores y tomadores de decisiones el acceso rápido al costo del dinero y a sus proyecciones futuras en México.
 
 ---
 
 ## Características Principales
 
-*   **Diseño Premium Estilo Overlay (Dark Theme)**: Interfaz compacta (310x250px) en gris oscuro translúcido, sin bordes de ventana clásicos para un aspecto moderno y limpio.
+*   **Diseño Premium Estilo Overlay (Dark Theme)**: Interfaz compacta (350x580px) en gris oscuro translúcido, sin bordes de ventana clásicos para un aspecto moderno y limpio.
 *   **Siempre al Frente (Always on Top)**: Flota de forma fija por encima de todas las demás aplicaciones.
+*   **Gráfica de Vectores en Canvas (Zero-Dependencies)**:
+    *   **Historial (Últimos 30 días hábiles)**: Línea continua blanca con la evolución real de la TIIE a 28 días.
+    *   **Proyección (Siguientes 12 meses)**: Corredor que se expande a partir de la fecha actual mostrando la Media proyectada (línea azul continua), el Máximo esperado (línea punteada roja) y el Mínimo esperado (línea punteada verde).
+*   **Tabla de Proyección Copiable**:
+    *   Muestra los 12 meses siguientes ordenados cronológicamente con sus valores mínimos, medios y máximos esperados.
+    *   **Selección Manual**: Es un widget de texto nativo que permite seleccionar cualquier fila o rango de texto con el cursor y copiarlo con `Ctrl+C`.
+    *   **Botón de Copiado Rápido 📋**: Copia la tabla completa directamente al portapapeles del sistema en formato de texto plano separado por tabulaciones, listo para ser pegado directamente en Excel, Google Sheets o Notepad conservando la estructura de columnas.
 *   **Interactividad Completa**:
     *   **Arrastrar y Soltar**: Haz clic izquierdo y arrastra desde cualquier parte del widget para posicionarlo en la esquina que prefieras.
     *   **Minimizar Nativo**: Botón `─` en el encabezado o clic derecho -> *"Minimizar"* para enviarlo a la barra de tareas de Windows de forma nativa sin perder la configuración flotante.
@@ -36,28 +43,10 @@ El widget aparecerá de inmediato en la esquina superior derecha de la pantalla 
 
 ### 3. Interacciones y Controles
 
-```
-+-------------------------------------------------------+
-|  TIIE 28 Dias  BANXICO- SIIE              ↻   ─   ×  |  <-- Barra de Controles
-+-------------------------------------------------------+
-|                                                       |
-|  TIIE DIARIA (28 DÍAS)                                |
-|  6.7559%   ▼ -0.0402%                                 |  <-- Tarjeta Diaria (Tasa, Tendencia)
-|  Ant: 6.7961%  |  Est. Mañana: 6.7610%                |  <-- Meta (Ayer vs Predicción)
-|                                                       |
-|  ---------------------------------------------------  |  <-- Separador Fino
-|                                                       |
-|  TASA OBJETIVO BANXICO                                |
-|  6.5000%   = Estable                                  |  <-- Tarjeta Tasa Objetivo (Valor, Tendencia)
-|  Ant: 6.5000%  |  Est. Siguiente: 6.5000%             |  <-- Meta (Tasa anterior vs Predicción)
-|                                                       |
-|  ● Act: 11:25:42                           SIE Banxico|  <-- Pie de página (Estado, Origen)
-+-------------------------------------------------------+
-```
-
 *   **Arrastrar el Widget**: Haz clic izquierdo en el título de la barra superior, en la parte posterior del fondo o en las tarjetas y mueve el mouse para reposicionarlo en cualquier lugar del escritorio.
 *   **Recargar los Datos**: Haz clic izquierdo sobre el botón circular `↻` en la barra superior. Verás que el indicador cambia a amarillo `"Actualizando..."` y se refresca.
 *   **Minimizar el Widget**: Presiona el botón de la línea `─` en la barra superior o haz clic derecho y selecciona **Minimizar ─**. El widget desaparecerá y se quedará en la barra de tareas de Windows. Haz clic sobre el ícono del script para restaurarlo en la misma posición de pantalla.
+*   **Copiar los Datos a Excel**: Haz clic sobre el botón **"Copiar Tabla 📋"** ubicado arriba del cuadro de texto. El botón cambiará temporalmente a `"Copiado! ✓"` en verde y ya podrás pegar los datos tabulados en una hoja de cálculo con `Ctrl+V`.
 *   **Ajustar Transparencia (Opacidad)**: Haz clic derecho sobre el cuerpo del monitor, ve al submenú **Opacidad** y selecciona el porcentaje deseado. La transparencia cambiará inmediatamente.
 *   **Configurar Prioridad de Pantalla**: Haz clic derecho y selecciona **Fijar al Frente (Sí/No)** para activar o desactivar que permanezca sobre otras aplicaciones.
 *   **Cerrar**: Presiona el botón `×` en la barra superior, o haz clic derecho y selecciona **Cerrar** para apagar el script y su programador de forma limpia.
@@ -67,21 +56,24 @@ El widget aparecerá de inmediato en la esquina superior derecha de la pantalla 
 ## Detalles Técnicos y Matemáticos
 
 ### 1. Consumo del API REST de Banxico
-El widget consume de forma conjunta las series **SF43783** (TIIE a 28 días diaria) y **SF61745** (Tasa Objetivo del Banco de México) en una única petición de rango mediante el servicio REST del SIE.
-*   Para optimizar la cuota de peticiones y respetar los límites de la API, el monitor solicita el histórico de los últimos 90 días naturales para ambas series de forma simultánea.
-*   El protocolo TLS 1.3 se configura explícitamente mediante el contexto SSL de Python (`DEFAULT@SECLEVEL=1`) para evitar errores de comunicación en sistemas Windows antiguos.
+El widget consume de forma conjunta las series de la TIIE, la Tasa Objetivo y la Encuesta de Expectativas en una única petición REST:
+*   `SF43783`: TIIE a 28 días diaria.
+*   `SF61745`: Tasa Objetivo.
+*   `SR14748` / `SR14752` / `SR14753`: Media, Mínimo y Máximo esperados para Cetes 28d al cierre del año actual $t$.
+*   `SR14755` / `SR14759` / `SR14760`: Media, Mínimo y Máximo esperados para Cetes 28d al cierre del año siguiente $t+1$.
 
-### 2. Lógica del Motor de Análisis
-*   **Tendencia (Diaria y Tasa Objetivo)**: Se calcula la diferencia aritmética entre el valor observado más reciente ($v_0$) y el de la jornada inmediata anterior ($v_{-1}$):
-    $$\Delta = v_0 - v_{-1}$$
-    *   $\Delta > 0.00001\% \rightarrow$ Alza (`▲` verde)
-    *   $\Delta < -0.00001\% \rightarrow$ Baja (`▼` rojo)
-    *   Diferencia insignificante $\rightarrow$ Estable (`=` dorado)
-*   **Tasa Objetivo**: Representa la tasa de interés de referencia para las operaciones interbancarias a un día establecidas por la Junta de Gobierno del Banco de México. Al ser una tasa de política monetaria, se mantiene constante por semanas o meses y cambia de forma discreta (+/-0.25% generalmente).
-*   **Algoritmo de Predicción (Regresión Lineal)**:
-    Se ajusta un modelo por mínimos cuadrados ordinarios $y = mx + c$ sobre las últimas 5 observaciones para preguntar la tasa de la jornada siguiente:
-    *   **Tasa Diaria Mañana (TIIE 28d)**: Proyección lineal a partir de la pendiente de los últimos 5 días.
-    *   **Tasa Objetivo Siguiente**: Proyección lineal a partir de los últimos 5 días (se mantiene plana a menos que haya habido un cambio muy reciente).
+### 2. Modelo de Pronóstico (Interpolación Lineal)
+Para trazar la proyección de las tasas en los siguientes 12 meses a partir de la fecha de hoy (Mes 0), calculamos dinámicamente la distancia en meses hacia los dos puntos de control provistos por la encuesta de Banxico:
+1.  **Mes $D_1$ (Diciembre de este año)**: Distancia calculada como $12 - \text{mes\_actual}$.
+2.  **Mes $D_2$ (Diciembre del año siguiente)**: Distancia calculada como $D_1 + 12$.
+
+Con estos puntos, aplicamos una interpolación lineal de tres tramos para cada uno de los 12 meses proyectados ($m$):
+*   Si $m \le D_1$:
+    $$\text{Tasa}_m = \text{Tasa}_{\text{hoy}} + \frac{m}{D_1} \times (\text{Expectativa}_t - \text{Tasa}_{\text{hoy}})$$
+*   Si $m > D_1$:
+    $$\text{Tasa}_m = \text{Expectativa}_t + \frac{m - D_1}{12} \times (\text{Expectativa}_{t+1} - \text{Expectativa}_t)$$
+
+*(En caso de que el mes actual sea Diciembre ($D_1 = 0$), el tramo de control se simplifica interpolando directamente hacia diciembre del año siguiente).*
 
 ---
 

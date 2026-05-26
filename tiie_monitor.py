@@ -8,7 +8,7 @@ import ssl
 import urllib.request
 import urllib.error
 import logging
-from tkinter import Tk, Frame, Label, Menu, StringVar, Canvas, BOTH, LEFT, RIGHT, Y, X
+from tkinter import Tk, Frame, Label, Menu, StringVar, Canvas, Text, BOTH, LEFT, RIGHT, Y, X
 
 # Configuration and Constants
 BANXICO_TOKEN = "f790ae51a34ab0af596fca1024f508d5810f4f52ff74ebac1244c4c741a60fa0"
@@ -16,6 +16,16 @@ TIIE_SERIES_ID = "SF43783"       # TIIE a 28 dias diaria
 TASA_OBJ_SERIES_ID = "SF61745"   # Tasa Objetivo Banxico
 LOG_FILENAME = "tiie_monitor.log"
 UPDATE_HOURS = [12, 13, 14, 15, 18, 19]
+
+# Expectations Series IDs (Cetes 28d Survey CR170)
+EXP_T_MEDIA = "SR14748"
+EXP_T_MIN = "SR14752"
+EXP_T_MAX = "SR14753"
+EXP_T1_MEDIA = "SR14755"
+EXP_T1_MIN = "SR14759"
+EXP_T1_MAX = "SR14760"
+
+EXPECTATION_IDS = [EXP_T_MEDIA, EXP_T_MIN, EXP_T_MAX, EXP_T1_MEDIA, EXP_T1_MIN, EXP_T1_MAX]
 
 # Color Palette (Premium Dark Theme)
 COLOR_BG = "#121214"         # Main window background (Nvidia overlay style dark)
@@ -85,9 +95,9 @@ class TIIEMonitorApp:
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         
-        # Default geometry: 310px width by 250px height, positioned near top-right
+        # Default geometry: 350px width by 580px height, positioned near top-right
         screen_width = self.root.winfo_screenwidth()
-        self.root.geometry(f"310x250+{screen_width - 340}+50")
+        self.root.geometry(f"350x580+{screen_width - 380}+50")
         
         # Default Opacity
         self.opacity = 0.85
@@ -100,6 +110,12 @@ class TIIEMonitorApp:
         # App State variables
         self.last_update_str = StringVar(value="Iniciando...")
         self.status_dot_color = COLOR_ACCENT_GOLD
+        self.current_table_content = ""
+        self.current_clipboard_text = ""
+        self.history_rates_to_plot = []
+        self.forecast_media = []
+        self.forecast_min = []
+        self.forecast_max = []
         
         # Daily Variables
         self.daily_val = StringVar(value="--.- %")
@@ -237,6 +253,29 @@ class TIIEMonitorApp:
         self.monthly_next_lbl = Label(self.monthly_meta_frame, textvariable=self.monthly_next, font=("Segoe UI", 8), fg=COLOR_TEXT_MUTED, bg=COLOR_BG)
         self.monthly_next_lbl.pack(side=LEFT)
         
+        # --- CHART SECTION (CANVAS) ---
+        self.chart_divider = Canvas(self.container, height=1, bg=COLOR_BORDER, bd=0, highlightthickness=0)
+        self.chart_divider.pack(fill=X, padx=10, pady=(6, 4))
+        
+        self.canvas = Canvas(self.container, bg=COLOR_BG, highlightthickness=1, highlightbackground=COLOR_BORDER, highlightcolor=COLOR_BORDER, width=330, height=110)
+        self.canvas.pack(fill=X, padx=10, pady=2)
+        
+        # --- TABLE SECTION (FORECAST) ---
+        self.table_divider = Canvas(self.container, height=1, bg=COLOR_BORDER, bd=0, highlightthickness=0)
+        self.table_divider.pack(fill=X, padx=10, pady=(6, 4))
+        
+        self.table_header_frame = Frame(self.container, bg=COLOR_BG)
+        self.table_header_frame.pack(fill=X, padx=10, pady=2)
+        
+        self.table_title_lbl = Label(self.table_header_frame, text="PRONÓSTICO SIGUIENTES 12 MESES", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_MUTED, bg=COLOR_BG)
+        self.table_title_lbl.pack(side=LEFT)
+        
+        self.copy_btn = Label(self.table_header_frame, text="Copiar Tabla 📋", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_PRIMARY, bg="#2a2a30", padx=6, pady=2, cursor="hand2")
+        self.copy_btn.pack(side=RIGHT)
+        
+        self.table_text = Text(self.container, font=("Consolas", 8), bg=COLOR_CARD, fg=COLOR_TEXT_PRIMARY, bd=1, highlightbackground=COLOR_BORDER, highlightcolor=COLOR_BORDER, highlightthickness=1, height=10, padx=5, pady=5, selectbackground="#30d158", selectforeground="#000000")
+        self.table_text.pack(fill=X, padx=10, pady=(2, 4))
+        
         # --- FOOTER BAR ---
         self.footer_frame = Frame(self.container, bg=COLOR_BG)
         self.footer_frame.pack(fill=X, side="bottom", padx=10, pady=(2, 6))
@@ -263,6 +302,7 @@ class TIIEMonitorApp:
         for widget in [self.header_frame, self.title_lbl, self.container, 
                        self.daily_frame, self.daily_title_lbl,
                        self.monthly_frame, self.monthly_title_lbl,
+                       self.table_header_frame, self.table_title_lbl,
                        self.footer_frame, self.last_update_lbl]:
             widget.bind("<Button-1>", self.start_window_drag)
             widget.bind("<B1-Motion>", self.execute_window_drag)
@@ -300,6 +340,11 @@ class TIIEMonitorApp:
         self.min_btn.bind("<Enter>", lambda e: self.min_btn.config(fg=COLOR_TEXT_PRIMARY, bg="#27272a"))
         self.min_btn.bind("<Leave>", lambda e: self.min_btn.config(fg=COLOR_TEXT_MUTED, bg=COLOR_HEADER))
         self.min_btn.bind("<Button-1>", lambda e: self.minimize_window())
+        
+        # Copy button hover and click
+        self.copy_btn.bind("<Enter>", lambda e: self.copy_btn.config(bg="#3a3a40"))
+        self.copy_btn.bind("<Leave>", lambda e: self.copy_btn.config(bg="#2a2a30"))
+        self.copy_btn.bind("<Button-1>", lambda e: self.copy_table_to_clipboard())
         
         # Bind the Map event to restore frameless styling when de-minimized
         self.root.bind("<Map>", self.on_window_map)
@@ -389,8 +434,9 @@ class TIIEMonitorApp:
             start_str = start_date.strftime("%Y-%m-%d")
             end_str = end_date.strftime("%Y-%m-%d")
             
-            url = f"https://www.banxico.org.mx/SieAPIRest/service/v1/series/{TIIE_SERIES_ID},{TASA_OBJ_SERIES_ID}/datos/{start_str}/{end_str}"
-            logger.info(f"Querying Banxico API range: {start_str} to {end_str} for series {TIIE_SERIES_ID},{TASA_OBJ_SERIES_ID}")
+            all_series_ids = [TIIE_SERIES_ID, TASA_OBJ_SERIES_ID] + EXPECTATION_IDS
+            url = f"https://www.banxico.org.mx/SieAPIRest/service/v1/series/{','.join(all_series_ids)}/datos/{start_str}/{end_str}"
+            logger.info(f"Querying Banxico API range: {start_str} to {end_str} for series {','.join(all_series_ids)}")
             
             req = urllib.request.Request(url)
             req.add_header("Bmx-Token", BANXICO_TOKEN)
@@ -402,7 +448,7 @@ class TIIEMonitorApp:
                     
                     series_list = parsed_res.get("bmx", {}).get("series", [])
                     if not series_list or len(series_list) < 2:
-                        raise ValueError("Expected 2 series from Banxico API, got fewer or none")
+                        raise ValueError("Expected at least core series from Banxico API, got fewer or none")
                     
                     logger.info(f"Retrieved {len(series_list)} series successfully.")
                     
@@ -510,6 +556,90 @@ class TIIEMonitorApp:
             logger.error("Insufficient observations for Tasa Objetivo")
             raise ValueError("Insufficient observations for Tasa Objetivo")
 
+        # 3. INTERPOLATION FORECAST AND EXPECTATIONS
+        current_tiie = tiie_rates[-1]
+        
+        def get_last_val(s_dict, sid, default):
+            vals = s_dict.get(sid, [])
+            return vals[-1] if vals else default
+            
+        val_t_media = get_last_val(series_dict, EXP_T_MEDIA, current_tiie)
+        val_t_min = get_last_val(series_dict, EXP_T_MIN, current_tiie)
+        val_t_max = get_last_val(series_dict, EXP_T_MAX, current_tiie)
+        
+        val_t1_media = get_last_val(series_dict, EXP_T1_MEDIA, current_tiie)
+        val_t1_min = get_last_val(series_dict, EXP_T1_MIN, current_tiie)
+        val_t1_max = get_last_val(series_dict, EXP_T1_MAX, current_tiie)
+        
+        logger.info(f"Expectations CR170 Cetes 28d Year t (Media/Min/Max): {val_t_media}/{val_t_min}/{val_t_max}")
+        logger.info(f"Expectations CR170 Cetes 28d Year t+1 (Media/Min/Max): {val_t1_media}/{val_t1_min}/{val_t1_max}")
+        
+        today = datetime.date.today()
+        current_month = today.month
+        
+        d1 = 12 - current_month
+        d2 = d1 + 12
+        
+        # Build interpolation control points
+        points_media = [(0, current_tiie)]
+        points_min = [(0, current_tiie)]
+        points_max = [(0, current_tiie)]
+        
+        if d1 > 0:
+            points_media.append((d1, val_t_media))
+            points_min.append((d1, val_t_min))
+            points_max.append((d1, val_t_max))
+            
+            points_media.append((d2, val_t1_media))
+            points_min.append((d2, val_t1_min))
+            points_max.append((d2, val_t1_max))
+        else:
+            points_media.append((12, val_t1_media))
+            points_min.append((12, val_t1_min))
+            points_max.append((12, val_t1_max))
+            
+        def get_interpolated_val(m, points):
+            for i in range(len(points) - 1):
+                x0, y0 = points[i]
+                x1, y1 = points[i+1]
+                if x0 <= m <= x1:
+                    if x1 == x0:
+                        return y0
+                    return y0 + (m - x0) * (y1 - y0) / (x1 - x0)
+            return points[-1][1]
+            
+        # Compute forecasts
+        self.forecast_media = [get_interpolated_val(m, points_media) for m in range(13)]
+        self.forecast_min = [get_interpolated_val(m, points_min) for m in range(13)]
+        self.forecast_max = [get_interpolated_val(m, points_max) for m in range(13)]
+        self.history_rates_to_plot = tiie_rates[-30:]
+        
+        # Construct table text
+        def get_future_month_name(months_ahead):
+            year = today.year + (today.month + months_ahead - 1) // 12
+            month = (today.month + months_ahead - 1) % 12 + 1
+            months_es = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+            return f"{months_es[month-1]} {str(year)[2:]}"
+            
+        table_lines = []
+        table_lines.append(" Mes      Mín (%)  Media (%)  Máx (%)")
+        table_lines.append("─" * 38)
+        
+        clipboard_lines = []
+        clipboard_lines.append("Mes\tMín (%)\tMedia (%)\tMáx (%)")
+        
+        for m in range(1, 13):
+            mes_name = get_future_month_name(m)
+            val_min = self.forecast_min[m]
+            val_med = self.forecast_media[m]
+            val_max = self.forecast_max[m]
+            
+            table_lines.append(f" {mes_name:<8} {val_min:>7.4f}%   {val_med:>7.4f}%  {val_max:>7.4f}%")
+            clipboard_lines.append(f"{mes_name}\t{val_min:.4f}%\t{val_med:.4f}%\t{val_max:.4f}%")
+            
+        self.current_table_content = "\n".join(table_lines)
+        self.current_clipboard_text = "\n".join(clipboard_lines)
+
     def finalize_update_ui(self, success, error_msg):
         self.updating_now = False
         
@@ -530,6 +660,15 @@ class TIIEMonitorApp:
             self.monthly_trend_sym_lbl.config(fg=self.monthly_trend_color)
             self.monthly_trend_lbl.config(fg=self.monthly_trend_color)
             
+            # Update table text widget
+            self.table_text.config(state="normal")
+            self.table_text.delete("1.0", "end")
+            self.table_text.insert("1.0", self.current_table_content)
+            self.table_text.config(state="disabled")
+            
+            # Update chart canvas
+            self.update_chart(self.history_rates_to_plot, self.forecast_media, self.forecast_min, self.forecast_max)
+            
             logger.info("GUI successfully refreshed with new metrics.")
         else:
             # On error, maintain older readings but show error status in footer
@@ -537,6 +676,104 @@ class TIIEMonitorApp:
             self.status_dot_color = COLOR_ACCENT_RED
             self.draw_status_dot(COLOR_ACCENT_RED)
             logger.warning(f"GUI refresh completed with failures: {error_msg}")
+
+    def update_chart(self, history_rates, forecast_media, forecast_min, forecast_max):
+        self.canvas.delete("all")
+        
+        canvas_width = 330
+        canvas_height = 110
+        
+        margin_left = 40
+        margin_right = 15
+        margin_top = 15
+        margin_bottom = 20
+        
+        plot_width = canvas_width - margin_left - margin_right
+        plot_height = canvas_height - margin_top - margin_bottom
+        
+        all_vals = list(history_rates) + list(forecast_media) + list(forecast_min) + list(forecast_max)
+        if not all_vals:
+            return
+            
+        min_v = min(all_vals)
+        max_v = max(all_vals)
+        v_range = max_v - min_v
+        if v_range < 0.001:
+            v_range = 1.0
+            
+        y_min = min_v - 0.08 * v_range
+        y_max = max_v + 0.08 * v_range
+        
+        def get_y(val):
+            return margin_top + plot_height - ((val - y_min) / (y_max - y_min)) * plot_height
+            
+        # Draw grid lines
+        y_grid_vals = [y_min + 0.1 * (y_max - y_min), (y_min + y_max) / 2.0, y_max - 0.1 * (y_max - y_min)]
+        for g_val in y_grid_vals:
+            y_coord = get_y(g_val)
+            self.canvas.create_line(margin_left, y_coord, margin_left + plot_width, y_coord, fill="#2a2a30", dash=(2, 2))
+            self.canvas.create_text(margin_left - 5, y_coord, text=f"{g_val:.2f}%", fill=COLOR_TEXT_MUTED, font=("Segoe UI", 7), anchor="e")
+            
+        # Today vertical line (midpoint of plot)
+        x_mid = margin_left + plot_width / 2
+        self.canvas.create_line(x_mid, margin_top, x_mid, margin_top + plot_height, fill="#3a3a40", dash=(2, 2))
+        self.canvas.create_text(x_mid, margin_top - 5, text="Hoy", fill=COLOR_TEXT_MUTED, font=("Segoe UI", 7), anchor="s")
+        
+        # Bottom labels
+        self.canvas.create_text(margin_left + 5, margin_top + plot_height + 5, text="Historial (30d)", fill=COLOR_TEXT_MUTED, font=("Segoe UI", 7, "bold"), anchor="nw")
+        self.canvas.create_text(margin_left + plot_width - 5, margin_top + plot_height + 5, text="Pronóstico (12m)", fill=COLOR_TEXT_MUTED, font=("Segoe UI", 7, "bold"), anchor="ne")
+        
+        # Plot history
+        H = len(history_rates)
+        if H >= 2:
+            hist_coords = []
+            for i, val in enumerate(history_rates):
+                x = margin_left + (i / (H - 1)) * (plot_width / 2)
+                y = get_y(val)
+                hist_coords.extend([x, y])
+            self.canvas.create_line(hist_coords, fill="#ffffff", width=2)
+            
+        # Plot forecast media
+        F = len(forecast_media)
+        if F >= 2:
+            media_coords = []
+            for j, val in enumerate(forecast_media):
+                x = x_mid + (j / (F - 1)) * (plot_width / 2)
+                y = get_y(val)
+                media_coords.extend([x, y])
+            self.canvas.create_line(media_coords, fill="#54afec", width=2)
+            
+            # Plot max
+            max_coords = []
+            for j, val in enumerate(forecast_max):
+                x = x_mid + (j / (F - 1)) * (plot_width / 2)
+                y = get_y(val)
+                max_coords.extend([x, y])
+            self.canvas.create_line(max_coords, fill="#ff453a", width=1.5, dash=(4, 4))
+            
+            # Plot min
+            min_coords = []
+            for j, val in enumerate(forecast_min):
+                x = x_mid + (j / (F - 1)) * (plot_width / 2)
+                y = get_y(val)
+                min_coords.extend([x, y])
+            self.canvas.create_line(min_coords, fill="#30d158", width=1.5, dash=(4, 4))
+
+    def copy_table_to_clipboard(self):
+        if not hasattr(self, "current_clipboard_text") or not self.current_clipboard_text:
+            return
+        
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(self.current_clipboard_text)
+            self.root.update()
+            
+            # Micro-animation feedback
+            self.copy_btn.config(text="Copiado! ✓", fg=COLOR_ACCENT_GREEN)
+            logger.info("Table copied to clipboard successfully.")
+            self.root.after(1500, lambda: self.copy_btn.config(text="Copiar Tabla 📋", fg=COLOR_TEXT_PRIMARY))
+        except Exception as e:
+            logger.error(f"Error copying table to clipboard: {e}")
 
     # --- SCHEDULER IMPLEMENTATION ---
     def run_scheduler(self):
