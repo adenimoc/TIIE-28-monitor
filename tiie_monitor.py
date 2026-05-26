@@ -269,7 +269,7 @@ class TIIEMonitorApp:
         self.table_header_frame = Frame(self.container, bg=COLOR_BG)
         self.table_header_frame.pack(fill=X, padx=10, pady=2)
         
-        self.table_title_lbl = Label(self.table_header_frame, text="PRONÓSTICO SIGUIENTES 12 MESES", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_MUTED, bg=COLOR_BG)
+        self.table_title_lbl = Label(self.table_header_frame, text="PRONÓSTICO TIIE 28 (ANCLA: CETES 28)", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_MUTED, bg=COLOR_BG)
         self.table_title_lbl.pack(side=LEFT)
         
         self.copy_btn = Label(self.table_header_frame, text="Copiar Tabla 📋", font=("Segoe UI", 8, "bold"), fg=COLOR_TEXT_PRIMARY, bg="#2a2a30", padx=6, pady=2, cursor="hand2")
