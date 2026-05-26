@@ -113,6 +113,8 @@ class TIIEMonitorApp:
         self.current_table_content = ""
         self.current_clipboard_text = ""
         self.history_rates_to_plot = []
+        self.is_collapsed = False
+        self.is_minimized_to_taskbar = False
         self.forecast_media = []
         self.forecast_min = []
         self.forecast_max = []
@@ -310,7 +312,8 @@ class TIIEMonitorApp:
         # Context menu (Right click)
         self.context_menu = Menu(self.root, tearoff=0, bg=COLOR_HEADER, fg=COLOR_TEXT_PRIMARY, activebackground=COLOR_BG, activeforeground=COLOR_TEXT_PRIMARY, bd=1, relief="flat")
         self.context_menu.add_command(label="Refrescar Ahora ↻", command=self.trigger_refresh)
-        self.context_menu.add_command(label="Minimizar ─", command=self.minimize_window)
+        self.context_menu.add_command(label="Colapsar / Expandir ⤢", command=self.toggle_collapse)
+        self.context_menu.add_command(label="Minimizar a Barra ─", command=self.minimize_window)
         
         # Opacity submenu
         self.opacity_submenu = Menu(self.context_menu, tearoff=0, bg=COLOR_HEADER, fg=COLOR_TEXT_PRIMARY, activebackground=COLOR_BG, bd=1)
@@ -339,7 +342,7 @@ class TIIEMonitorApp:
         
         self.min_btn.bind("<Enter>", lambda e: self.min_btn.config(fg=COLOR_TEXT_PRIMARY, bg="#27272a"))
         self.min_btn.bind("<Leave>", lambda e: self.min_btn.config(fg=COLOR_TEXT_MUTED, bg=COLOR_HEADER))
-        self.min_btn.bind("<Button-1>", lambda e: self.minimize_window())
+        self.min_btn.bind("<Button-1>", lambda e: self.toggle_collapse())
         
         # Copy button hover and click
         self.copy_btn.bind("<Enter>", lambda e: self.copy_btn.config(bg="#3a3a40"))
@@ -387,20 +390,81 @@ class TIIEMonitorApp:
         sys.exit(0)
 
     def minimize_window(self):
-        logger.info("Minimizing window...")
+        logger.info("Minimizing window to taskbar...")
         # Save position before minimizing to prevent window manager drift
         self.last_x = self.root.winfo_x()
         self.last_y = self.root.winfo_y()
+        self.is_minimized_to_taskbar = True
         self.root.overrideredirect(False)
         self.root.iconify()
 
     def on_window_map(self, event):
-        # When restored from minimized state, re-apply borderless setting
+        if hasattr(self, "is_minimized_to_taskbar") and self.is_minimized_to_taskbar:
+            self.is_minimized_to_taskbar = False
+            self.root.after(150, self.restore_borderless_state)
+
+    def restore_borderless_state(self):
         self.root.overrideredirect(True)
-        # Restore coordinates if saved to bypass title bar shift offsets
+        # If collapsed, restore collapsed geometry, otherwise restore full geometry
         if hasattr(self, "last_x") and hasattr(self, "last_y"):
-            self.root.geometry(f"+{self.last_x}+{self.last_y}")
+            h = 30 if self.is_collapsed else 580
+            self.root.geometry(f"350x{h}+{self.last_x}+{self.last_y}")
         self.root.attributes("-topmost", self.is_always_on_top)
+        if not self.is_collapsed and self.history_rates_to_plot:
+            self.update_chart(self.history_rates_to_plot, self.forecast_media, self.forecast_min, self.forecast_max)
+
+    def toggle_collapse(self):
+        if not self.is_collapsed:
+            # Collapse window
+            self.is_collapsed = True
+            
+            # Hide all widgets below header
+            self.daily_frame.pack_forget()
+            self.divider.pack_forget()
+            self.monthly_frame.pack_forget()
+            self.chart_divider.pack_forget()
+            self.canvas.pack_forget()
+            self.table_divider.pack_forget()
+            self.table_header_frame.pack_forget()
+            self.table_text.pack_forget()
+            self.footer_frame.pack_forget()
+            
+            # Shrink window height to header height + borders
+            curr_x = self.root.winfo_x()
+            curr_y = self.root.winfo_y()
+            self.root.geometry(f"350x30+{curr_x}+{curr_y}")
+            
+            # Change minimize button text to indicate expand
+            self.min_btn.config(text=" ＋ ")
+            logger.info("Widget collapsed to header bar.")
+        else:
+            # Expand window
+            self.is_collapsed = False
+            
+            # Repack all widgets in their correct order
+            self.daily_frame.pack(fill=X, padx=10, pady=(6, 2))
+            self.divider.pack(fill=X, padx=10, pady=8)
+            self.monthly_frame.pack(fill=X, padx=10, pady=2)
+            self.chart_divider.pack(fill=X, padx=10, pady=(6, 4))
+            self.canvas.pack(fill=X, padx=10, pady=2)
+            self.table_divider.pack(fill=X, padx=10, pady=(6, 4))
+            self.table_header_frame.pack(fill=X, padx=10, pady=2)
+            self.table_text.pack(fill=X, padx=10, pady=(2, 4))
+            self.footer_frame.pack(fill=X, side="bottom", padx=10, pady=(2, 6))
+            
+            # Restore window height to 580px
+            curr_x = self.root.winfo_x()
+            curr_y = self.root.winfo_y()
+            self.root.geometry(f"350x580+{curr_x}+{curr_y}")
+            
+            # Change minimize button text back to collapse indicator
+            self.min_btn.config(text=" ─ ")
+            
+            # Redraw chart if data is present
+            if self.history_rates_to_plot:
+                self.update_chart(self.history_rates_to_plot, self.forecast_media, self.forecast_min, self.forecast_max)
+                
+            logger.info("Widget expanded back to full size.")
 
     # --- REFRESH UTILITIES ---
     def trigger_refresh(self):
