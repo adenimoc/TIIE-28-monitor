@@ -1,4 +1,4 @@
-# Monitor de TIIE 28 Días, Tasa Objetivo y Expectativas — BANXICO-SIIE (v0.2)
+# Monitor de TIIE 28 Días, Tasa Objetivo y Expectativas — BANXICO-SIE (v0.2)
 
 Una interfaz gráfica ultra-compacta y elegante (tipo widget overlay de Nvidia) desarrollada en Python para el monitoreo en tiempo real de la **Tasa de Interés Interbancaria de Equilibrio (TIIE) a 28 días** diaria, la **Tasa Objetivo** de política monetaria, y las **Expectativas de la Encuesta de Cetes a 28 días** al cierre del año actual y siguiente, consumiendo la API oficial de Banco de México (Banxico).
 
