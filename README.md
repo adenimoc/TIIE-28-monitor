@@ -49,8 +49,7 @@ Para poder consultar la información financiera oficial, el monitor requiere de 
 5.  **Cambiar o Actualizar el Token**:
     *   Si requieres cambiar tu token, haz clic derecho sobre cualquier parte del monitor, selecciona **"Configurar Token 🔑"**, ingresa la nueva clave en la ventana flotante y presiona Aceptar. Los datos se actualizarán al instante.
 
-> [!IMPORTANT]
-> El archivo `banxico_token.txt` está listado en `.gitignore`, por lo que **nunca se subirá a tu repositorio de GitHub**, protegiendo tu clave privada de accesos públicos no autorizados.
+
 
 ### 3. Instrucciones de Inicio
 Para arrancar el monitor, abre una terminal (PowerShell o cmd) en la carpeta del proyecto y ejecuta:
