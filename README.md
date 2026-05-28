@@ -4,6 +4,9 @@ Una interfaz gráfica ultra-compacta y elegante (tipo widget overlay de Nvidia) 
 
 El monitor está diseñado para permanecer fijo por encima de otras ventanas en pantalla, facilitando a analistas financieros, desarrolladores y tomadores de decisiones el acceso rápido al costo del dinero y a sus proyecciones futuras en México.
 
+<img width="364" height="592" alt="image" src="https://github.com/user-attachments/assets/1f10ab13-f20f-4916-b997-759a74c8dc43" />
+
+
 ---
 
 ## Características Principales
